@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String
+  emailVerified Int      @default(0)
+  
+  plan          String   @default("FREE")
+  stripeCustomerId String?  @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus String @default("INACTIVE")
+  
+  messagesUsed  Int      @default(0)
+  messagesLimit Int      @default(50)
+  tokensUsed    Int      @default(0)
+  
+  createdAt     String   @default("")
+  updatedAt     String   @default("")
+  lastLoginAt   String?
+  
+  conversations Conversation[]
+  usage         Usage[]
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String   @default("Nueva conversación")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  messages  Message[]
+  
+  createdAt String   @default("")
+  updatedAt String   @default("")
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  role           String
+  content        String
+  tokensUsed     Int      @default(0)
+  model          String?
+  
+  createdAt      String   @default("")
+}
+
+model Usage {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  messagesCount Int     @default(1)
+  tokensUsed    Int
+  cost          Float
+  model         String
+  
+  timestamp    String   @default("")
+}

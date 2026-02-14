@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+
+export async function POST(req: Request) {
+  try {
+    const { email, password, name } = await req.json();
+
+    // Validaciones
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email y contraseña requeridos" },
+        { status: 400 }
+      );
+    }
+
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: "La contraseña debe tener al menos 6 caracteres" },
+        { status: 400 }
+      );
+    }
+
+    // Verificar si el usuario ya existe
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "Este email ya está registrado" },
+        { status: 400 }
+      );
+    }
+
+    // Hash de la contraseña
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Crear usuario
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: name || email.split('@')[0],
+        passwordHash,
+        plan: "FREE",
+        messagesLimit: 50,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    });
+
+    return NextResponse.json({
+      message: "Usuario creado exitosamente",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      }
+    });
+
+  } catch (error) {
+    console.error("Error en registro:", error);
+    return NextResponse.json(
+      { error: "Error al crear usuario" },
+      { status: 500 }
+    );
+  }
+}
