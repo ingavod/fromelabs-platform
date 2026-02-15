@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +11,7 @@ export async function POST(req: Request) {
     // Validaciones
     if (!email || !password) {
       return NextResponse.json(
-        { error: "Email y contraseña requeridos" },
+        { error: "Email y contraseña son requeridos" },
         { status: 400 }
       );
     }
@@ -33,17 +35,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Hash de la contraseña
+    // Hashear la contraseña
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Crear usuario
     const user = await prisma.user.create({
       data: {
         email,
-        name: name || email.split('@')[0],
+        name: name || email.split("@")[0],
         passwordHash,
-        plan: "FREE",
-        messagesLimit: 50,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -54,9 +54,9 @@ export async function POST(req: Request) {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
       }
-    });
+    }, { status: 201 });
 
   } catch (error) {
     console.error("Error en registro:", error);

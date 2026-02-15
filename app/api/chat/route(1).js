@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+console.log('USANDO SONNET 4.5')
+
 const PLAN_LIMITS = {
   FREE: 50,
   PRO: 500,
@@ -29,6 +31,7 @@ export async function GET(request) {
     const getUsage = searchParams.get('getUsage')
     const conversationId = searchParams.get('conversationId')
 
+    // Obtener usuario
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -37,6 +40,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
     }
 
+    // Obtener uso de mensajes
     if (getUsage === 'true') {
       return NextResponse.json({
         usage: {
@@ -47,6 +51,7 @@ export async function GET(request) {
       })
     }
 
+    // Obtener historial de conversaciones
     if (getHistory === 'true') {
       const conversations = await prisma.conversation.findMany({
         where: { userId: user.id },
@@ -62,6 +67,7 @@ export async function GET(request) {
       return NextResponse.json({ conversations })
     }
 
+    // Obtener mensajes de una conversación específica
     if (conversationId) {
       const messages = await prisma.message.findMany({
         where: { conversationId },
@@ -78,6 +84,7 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Parámetro inválido' }, { status: 400 })
   } catch (error) {
     console.error('ERROR:', error.message)
+    console.error('STATUS:', error.status)
     return NextResponse.json(
       { error: 'Error al procesar la solicitud' },
       { status: 500 }
@@ -85,7 +92,7 @@ export async function GET(request) {
   }
 }
 
-// POST - Enviar mensaje (con soporte para imágenes y documentos)
+// POST - Enviar mensaje
 export async function POST(request) {
   try {
     const session = await getServerSession(authOptions)
@@ -95,12 +102,13 @@ export async function POST(request) {
     }
 
     const body = await request.json()
-    const { messages, conversationId, image, document } = body
+    const { messages, conversationId } = body
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Mensajes inválidos' }, { status: 400 })
     }
 
+    // Obtener usuario
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -122,48 +130,11 @@ export async function POST(request) {
       )
     }
 
-    // Preparar contenido del último mensaje con imagen o documento si existe
-    let lastMessageContent = messages[messages.length - 1].content
-    let apiMessages = [...messages]
-
-    // Si hay una imagen, convertir el último mensaje a formato multipart
-    if (image) {
-      const imageData = image.data.split(',')[1] // Remover prefijo data:image/...;base64,
-      
-      apiMessages[apiMessages.length - 1] = {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: image.type,
-              data: imageData
-            }
-          },
-          {
-            type: 'text',
-            text: lastMessageContent
-          }
-        ]
-      }
-    }
-
-    // Si hay un documento, añadir su contenido como contexto
-    if (document) {
-      lastMessageContent = `[Documento adjunto: ${document.name}]\n\n${document.content}\n\n---\n\nPregunta del usuario: ${lastMessageContent}`
-      
-      apiMessages[apiMessages.length - 1] = {
-        role: 'user',
-        content: lastMessageContent
-      }
-    }
-
     // Llamar a la API de Claude
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 8192,
-      messages: apiMessages,
+      messages: messages,
     })
 
     const assistantMessage = response.content[0].text
@@ -177,12 +148,9 @@ export async function POST(request) {
     }
 
     if (!conversation) {
+      // Crear nueva conversación con título basado en el primer mensaje
       const firstUserMessage = messages.find(m => m.role === 'user')
-      let title = 'Nueva conversación'
-      
-      if (firstUserMessage && firstUserMessage.content && typeof firstUserMessage.content === 'string') {
-        title = firstUserMessage.content.substring(0, 50)
-      }
+      const title = firstUserMessage?.content.substring(0, 50) || 'Nueva conversación'
 
       conversation = await prisma.conversation.create({
         data: {
@@ -233,6 +201,7 @@ export async function POST(request) {
     })
   } catch (error) {
     console.error('ERROR:', error.message)
+    console.error('STATUS:', error.status)
     return NextResponse.json(
       { error: error.message || 'Error al procesar el mensaje' },
       { status: error.status || 500 }
